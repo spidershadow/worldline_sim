@@ -14,7 +14,7 @@ The singularity window analysis investigates whether there are statistically sig
 ## Project Structure
 
 ```
-singularity_window_analyzer/
+.
 ├── scripts/
 │   └── analyze_singularity_window.py  # Main analysis script
 ├── data/                              # Data directory
@@ -87,4 +87,4 @@ The analysis follows a rigorous statistical approach:
 
 ## Contact
 
-[Add contact information]
+[Add contact information] 
