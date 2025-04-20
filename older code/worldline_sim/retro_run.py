@@ -11,14 +11,19 @@ python -m worldline_sim.retro_run --patterns uap,tech,rng,events \
 
 import argparse
 import math
+import sys
 from pathlib import Path
 from typing import List
 
 import numpy as np
 import pandas as pd
 
+# Add scripts directory to path so we can import from it
+scripts_path = Path(__file__).parent.parent / "scripts"
+sys.path.append(str(scripts_path))
+
 from worldline_sim.patterns import load_patterns
-from worldline_sim.sim import Timeline
+from scripts.sim import Timeline  # Updated import path
 from worldline_sim.viz import plot_timeline
 
 # ---------------------------------------------------------------------------

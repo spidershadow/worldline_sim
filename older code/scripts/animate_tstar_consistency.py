@@ -47,6 +47,143 @@ from find_consistent_tstar import (
     run_simulation,
 )
 
+# --- Additions for Final Analysis ---
+from collections import Counter
+
+def calculate_aggregate_stats(results: List[Dict[str, Any]], t_star_range: Tuple[int, int]) -> Dict[str, Any]:
+    """Calculate aggregate statistics across all simulation results."""
+    t_star_min, t_star_max = t_star_range
+    t_stars = list(range(t_star_min, t_star_max + 1))
+    
+    all_probs = pd.DataFrame(index=t_stars)
+    most_probable_t = []
+    raw_data = []
+
+    for result in results:
+        config_id = result['config_id']
+        probabilities = {t: result['probabilities'].get(t, 0.0) for t in t_stars}
+        all_probs[config_id] = probabilities.values()
+        
+        if probabilities:
+            peak_t = max(probabilities, key=probabilities.get)
+            most_probable_t.append(peak_t)
+        
+        # For raw data CSV
+        for t_star, prob in probabilities.items():
+            raw_data.append({
+                'config_id': config_id,
+                't_star': t_star,
+                'probability': prob,
+                **{k: v for k, v in result.items() if k not in ['probabilities', 'config_id']}
+            })
+
+    stats = {}
+    if not all_probs.empty:
+        stats['mean_probs'] = all_probs.mean(axis=1)
+        stats['median_probs'] = all_probs.median(axis=1)
+        stats['std_dev_probs'] = all_probs.std(axis=1)
+        stats['peak_counts'] = Counter(most_probable_t)
+        stats['most_frequent_peak'] = stats['peak_counts'].most_common(1)[0][0] if stats['peak_counts'] else None
+        stats['highest_mean_prob_t'] = stats['mean_probs'].idxmax() if not stats['mean_probs'].empty else None
+    else:
+        stats['mean_probs'] = pd.Series(index=t_stars, dtype=float).fillna(0)
+        stats['median_probs'] = pd.Series(index=t_stars, dtype=float).fillna(0)
+        stats['std_dev_probs'] = pd.Series(index=t_stars, dtype=float).fillna(0)
+        stats['peak_counts'] = Counter()
+        stats['most_frequent_peak'] = None
+        stats['highest_mean_prob_t'] = None
+        
+    stats['raw_data_df'] = pd.DataFrame(raw_data)
+    stats['summary_df'] = pd.DataFrame({
+        'mean': stats['mean_probs'],
+        'median': stats['median_probs'],
+        'std_dev': stats['std_dev_probs'],
+        'peak_count': pd.Series(stats['peak_counts'], index=t_stars).fillna(0)
+    })
+    
+    print("[ANALYSIS] Calculated aggregate statistics")
+    return stats
+
+def plot_final_aggregates(stats: Dict[str, Any], t_star_range: Tuple[int, int], output_dir: Path, file_prefix: str):
+    """Plot the final aggregated mean probability and peak histogram."""
+    t_star_min, t_star_max = t_star_range
+    t_stars = list(range(t_star_min, t_star_max + 1))
+
+    # Plot Mean Probability + Std Dev
+    fig_mean, ax_mean = plt.subplots(figsize=(10, 6))
+    mean_probs = stats.get('mean_probs', pd.Series(index=t_stars, dtype=float).fillna(0))
+    std_dev_probs = stats.get('std_dev_probs', pd.Series(index=t_stars, dtype=float).fillna(0))
+    ax_mean.bar(t_stars, mean_probs, yerr=std_dev_probs, capsize=5, alpha=0.7, label='Mean Probability')
+    ax_mean.set_xlabel("T* (Singularity Year)")
+    ax_mean.set_ylabel("Mean Probability")
+    ax_mean.set_title("Final Aggregated T* Mean Probability Distribution (with Std Dev)")
+    ax_mean.legend()
+    ax_mean.grid(True, axis='y', linestyle='--')
+    plt.tight_layout()
+    mean_plot_path = output_dir / f"{file_prefix}_aggregate_mean.png"
+    plt.savefig(mean_plot_path, dpi=150)
+    plt.close(fig_mean)
+    print(f"[ANALYSIS] Saved aggregate mean plot: {mean_plot_path}")
+
+    # Plot Peak Histogram
+    fig_hist, ax_hist = plt.subplots(figsize=(10, 6))
+    peak_counts = stats.get('peak_counts', Counter())
+    if peak_counts:
+        hist_data = pd.Series(peak_counts).reindex(t_stars, fill_value=0)
+        ax_hist.bar(hist_data.index, hist_data.values, alpha=0.7)
+    ax_hist.set_xlabel("T* (Singularity Year)")
+    ax_hist.set_ylabel("Frequency as Most Probable T*")
+    ax_hist.set_title("Final Aggregated Most Probable T* Frequency")
+    ax_hist.grid(True, axis='y', linestyle='--')
+    plt.tight_layout()
+    hist_plot_path = output_dir / f"{file_prefix}_aggregate_peak_hist.png"
+    plt.savefig(hist_plot_path, dpi=150)
+    plt.close(fig_hist)
+    print(f"[ANALYSIS] Saved peak histogram plot: {hist_plot_path}")
+
+def save_final_reports(stats: Dict[str, Any], output_dir: Path, file_prefix: str):
+    """Save the final aggregated results to CSV and a text report."""
+    summary_df = stats.get('summary_df', pd.DataFrame())
+    raw_data_df = stats.get('raw_data_df', pd.DataFrame())
+    
+    # Save summary CSV
+    summary_csv_path = output_dir.parent.parent / "data" / f"{file_prefix}_aggregate_summary.csv"
+    summary_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_df.to_csv(summary_csv_path, index_label='t_star')
+    print(f"[ANALYSIS] Saved summary CSV: {summary_csv_path}")
+
+    # Save raw data CSV
+    raw_csv_path = output_dir.parent.parent / "data" / f"{file_prefix}_aggregate_raw.csv"
+    raw_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_data_df.to_csv(raw_csv_path, index=False)
+    print(f"[ANALYSIS] Saved raw data CSV: {raw_csv_path}")
+
+    # Save text report
+    report_path = output_dir.parent / "reports" / f"{file_prefix}_aggregate_report.txt"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(report_path, 'w') as f:
+        f.write("Consistent T* Analysis Report\n")
+        f.write("===============================\n\n")
+        f.write(f"Total simulations run: {len(stats.get('raw_data_df', [])) // len(stats.get('mean_probs', [])) } unique configurations\n")
+        
+        highest_mean_t = stats.get('highest_mean_prob_t')
+        if highest_mean_t is not None:
+            mean_prob = stats['mean_probs'][highest_mean_t]
+            f.write(f"T* with highest mean probability: {highest_mean_t} (Prob = {mean_prob:.4f})\n")
+        
+        most_frequent_t = stats.get('most_frequent_peak')
+        if most_frequent_t is not None:
+            peak_count = stats['peak_counts'][most_frequent_t]
+            f.write(f"Most frequent peak T*: {most_frequent_t} (Count = {peak_count})\n")
+            
+        f.write("\nSummary Statistics per T*:\n")
+        f.write(summary_df.to_string())
+        f.write("\n")
+        
+    print(f"[ANALYSIS] Saved summary report: {report_path}")
+
+# --- End Additions ---
+
 def generate_parameter_configs(args):
     """Generate diverse parameter configurations to test."""
     configs = []
@@ -65,7 +202,7 @@ def generate_parameter_configs(args):
     
     leak_lambdas = [0.1, 0.2, 0.3]
     leak_tau0s = [10, 20, 30]
-    alphas = [5.0, 10.0, 15.0]
+    alphas = [0.1, 0.5, 1.0]
     correction_factors = [0.3, 0.5, 0.7]
     noise_ranges = [0.05, 0.1, 0.15]
     rng_tolerances = [5.0, 10.0, 15.0]
@@ -172,50 +309,46 @@ def create_probability_animation(results, t_star_range, output_file="tstar_conve
     pattern_to_color = {pattern: color for pattern, color in zip(pattern_combinations, pattern_colors)}
     
     # Create a figure with multiple subplots
-    fig = plt.figure(figsize=(16, 12))
+    fig = plt.figure(figsize=(16, 9)) # Adjusted figure size
     fig.suptitle("T* Probability Convergence Across Multiple Simulations", fontsize=16)
     
-    # Create grid for subplots
-    gs = plt.GridSpec(3, 3, height_ratios=[2, 1.5, 1.5], width_ratios=[2, 1, 1], hspace=0.35, wspace=0.25)
+    # Create grid for subplots - adjusted layout (removed one row)
+    gs = plt.GridSpec(2, 3, height_ratios=[2, 1.5], width_ratios=[2, 1, 1], hspace=0.35, wspace=0.25)
     
-    # 1. Probability bar chart (main plot)
+    # 1. Probability bar chart (main plot) - Moved to top left
     ax_prob = fig.add_subplot(gs[0, 0])
     ax_prob.set_title("Mean T* Probability Distribution")
     ax_prob.set_xlabel("T* (Singularity Year)")
     ax_prob.set_ylabel("Probability")
     
-    # 2. Running statistics plot
-    ax_stats = fig.add_subplot(gs[1, 0])
-    ax_stats.set_title("Running Statistics for T*=2050")
-    ax_stats.set_xlabel("Simulation Count")
-    ax_stats.set_ylabel("Probability")
-    
-    # 3. Heatmap of all simulations
-    ax_heat = fig.add_subplot(gs[:2, 1])
+    # 2. Running statistics plot - REMOVED
+
+    # 3. Heatmap of all simulations - Moved to top middle
+    ax_heat = fig.add_subplot(gs[0, 1])
     ax_heat.set_title("Simulation Results Heatmap")
     ax_heat.set_xlabel("T* (Singularity Year)")
     ax_heat.set_ylabel("Simulation #")
     
-    # 4. Most frequent T* histogram
-    ax_hist = fig.add_subplot(gs[2, 0])
+    # 4. Most frequent T* histogram - Moved to bottom left
+    ax_hist = fig.add_subplot(gs[1, 0])
     ax_hist.set_title("Most Probable T* Frequency")
     ax_hist.set_xlabel("T* (Singularity Year)")
     ax_hist.set_ylabel("Count")
     
-    # 5. Confidence interval plot
-    ax_ci = fig.add_subplot(gs[2, 1])
+    # 5. Confidence interval plot - Moved to bottom middle
+    ax_ci = fig.add_subplot(gs[1, 1])
     ax_ci.set_title("90% Confidence Interval")
     ax_ci.set_xlabel("Simulation Count")
     ax_ci.set_ylabel("T* Year")
     
-    # 6. Pattern comparison (NEW)
-    ax_pattern = fig.add_subplot(gs[0:2, 2])
+    # 6. Pattern comparison (NEW) - Moved to top right
+    ax_pattern = fig.add_subplot(gs[0, 2])
     ax_pattern.set_title("Pattern Impact on T* Probability")
     ax_pattern.set_xlabel("T* (Singularity Year)")
     ax_pattern.set_ylabel("Probability")
     
-    # 7. Pattern legend and statistics (NEW)
-    ax_pattern_stats = fig.add_subplot(gs[2, 2])
+    # 7. Pattern legend and statistics (NEW) - Moved to bottom right
+    ax_pattern_stats = fig.add_subplot(gs[1, 2])
     ax_pattern_stats.set_title("Pattern Statistics")
     ax_pattern_stats.set_axis_off()  # No axes needed for text
     
@@ -228,19 +361,14 @@ def create_probability_animation(results, t_star_range, output_file="tstar_conve
     for pattern in pattern_combinations:
         pattern_groups[pattern] = [r for r in results if r['patterns'] == pattern]
     
-    # Track running statistics
-    running_means = []
-    running_medians = []
+    # Track running statistics - REMOVED running_means, running_medians
     confidence_intervals = []
     
     # Prepare the bar container for the main probability plot
     bars = ax_prob.bar(t_stars, [0] * len(t_stars), alpha=0.7)
     
-    # Prepare line objects for running statistics
-    mean_line, = ax_stats.plot([], [], 'b-', label='Mean Probability of T*=2050')
-    median_line, = ax_stats.plot([], [], 'g-', label='Median Probability of T*=2050')
-    ax_stats.legend()
-    
+    # Prepare line objects for running statistics - REMOVED mean_line, median_line
+
     # Prepare histogram for most frequent T*
     hist_bars = ax_hist.bar(t_stars, [0] * len(t_stars), alpha=0.7)
     
@@ -306,8 +434,7 @@ def create_probability_animation(results, t_star_range, output_file="tstar_conve
         ax_pattern.set_xticks(t_stars)
     
     ax_prob.set_ylim(0, 1)
-    ax_stats.set_xlim(1, len(results))
-    ax_stats.set_ylim(0, 1)
+    # ax_stats removed
     ax_hist.set_ylim(0, len(results))
     ax_ci.set_xlim(1, len(results))
     ax_ci.set_ylim(t_star_min - 0.5, t_star_max + 0.5)
@@ -356,21 +483,14 @@ def create_probability_animation(results, t_star_range, output_file="tstar_conve
         if frame > 0:
             current_df = all_probs.iloc[:, :frame+1]
             mean_probs = current_df.mean(axis=1)
-            median_probs = current_df.median(axis=1)
+            median_probs = current_df.median(axis=1) # Keep median calc for CI maybe? Check usage later
             
             # Update the main probability bars
             for i, t_star in enumerate(t_stars):
                 bars[i].set_height(mean_probs[t_star])
             
-            # Update running statistics for T*=2050 (or middle of range if not present)
-            target_year = 2050 if 2050 in mean_probs.index else mean_probs.index[len(mean_probs)//2]
-            
-            running_means.append(mean_probs[target_year])
-            running_medians.append(median_probs[target_year])
-            
-            mean_line.set_data(range(1, len(running_means) + 1), running_means)
-            median_line.set_data(range(1, len(running_medians) + 1), running_medians)
-            
+            # Update running statistics for T*=2050 - REMOVED
+
             # Update most probable T* histogram
             most_probable = current_df.idxmax(axis=0)
             t_star_counts = most_probable.value_counts()
@@ -429,7 +549,7 @@ def create_probability_animation(results, t_star_range, output_file="tstar_conve
                     pattern_stats.append(f"{pattern}: Peak T*={most_likely_t} (P={max_prob:.3f})")
             
             # Update pattern statistics text
-            pattern_stats_text.set_text("\n".join(pattern_stats))
+            pattern_stats_text.set_text("\\n".join(pattern_stats))
             
             # Update heatmap
             for i in range(frame + 1):
@@ -439,8 +559,8 @@ def create_probability_animation(results, t_star_range, output_file="tstar_conve
             
             heatmap.set_array(heatmap_data[:frame+1])
         
-        # Return all the artists that need to be updated
-        artists = [sim_text, *bars, mean_line, median_line, *hist_bars, ci_lower, ci_upper, 
+        # Return all the artists that need to be updated - REMOVED mean_line, median_line
+        artists = [sim_text, *bars, *hist_bars, ci_lower, ci_upper, 
                   heatmap, pattern_stats_text]
         artists.extend(list(pattern_lines.values()))
         return artists
@@ -667,15 +787,43 @@ def main():
     # Run all simulations
     results = run_all_simulations(configs)
     
-    # Create animation
-    # Update output path to use the new directory structure
-    output_dir = Path(project_root) / "output" / "animations"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / args.output
+    # --- Define Output Paths --- 
+    output_file_path = Path(args.output)
+    output_prefix = output_file_path.stem # Use filename stem for related outputs
+    animations_dir = Path(project_root) / "output" / "animations"
+    animations_dir.mkdir(parents=True, exist_ok=True)
+    images_dir = Path(project_root) / "output" / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    reports_dir = Path(project_root) / "output" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    data_dir = Path(project_root) / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
     
-    create_probability_animation(results, args.tstar_range, output_file=str(output_file))
-    
-    print("[ANIM] Animation process complete")
+    animation_output_file = animations_dir / output_file_path.name
+
+    # --- Create Animation --- 
+    if results:
+        create_probability_animation(results, args.tstar_range, output_file=str(animation_output_file))
+    else:
+        print("[ANIM] No results generated, skipping animation.")
+
+    # --- Perform Final Analysis --- 
+    if results:
+        print("\n[ANALYSIS] Performing final analysis on aggregated results...")
+        # Calculate final stats
+        final_stats = calculate_aggregate_stats(results, args.tstar_range)
+        
+        # Plot final aggregate plots
+        plot_final_aggregates(final_stats, args.tstar_range, images_dir, output_prefix)
+        
+        # Save final reports and CSVs
+        save_final_reports(final_stats, images_dir, output_prefix) # Pass consistent dirs
+        
+        print("[ANALYSIS] Final analysis complete.")
+    else:
+        print("[ANALYSIS] No results generated, skipping final analysis.")
+
+    print("\n[ANIM] Animation and analysis process complete")
     return 0
 
 if __name__ == "__main__":

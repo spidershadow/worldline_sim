@@ -1,7 +1,4 @@
-# Output directories
-output/
-output/singularity_analysis/
-**/output/
+
 
 # Generated files
 *.html
@@ -9,6 +6,7 @@ output/singularity_analysis/
 *.csv
 *.log
 *.pdf
+*.mp4
 
 # Python cache files
 __pycache__/

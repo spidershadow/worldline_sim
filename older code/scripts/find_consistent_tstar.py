@@ -104,11 +104,12 @@ def custom_backfill_timeline(patterns: List[Pattern], t_star: int, *, max_tau: i
                     correction = (target - (base + retro)) * correction_factor
                     noise = p._rng.uniform(-noise_range, noise_range)
                     
-                    # Add exponential distance factor - more distant T* has less correction
-                    distance_factor = math.exp(-abs(t_star - 2050) / 40)
-                    effective_correction = correction * distance_factor
+                    # REMOVED: Exponential distance factor - no longer biasing towards 2050
+                    # distance_factor = math.exp(-abs(t_star - 2050) / 40)
+                    # effective_correction = correction * distance_factor
                     
-                    base = base + effective_correction + noise
+                    # Apply correction and noise directly
+                    base = base + correction + noise
                     
                     # Apply a T*-dependent bias (optional, controlled by a flag)
                     apply_bias = getattr(p, "apply_tstar_bias", False)
@@ -194,39 +195,63 @@ def run_simulation(config):
             print(f"[CONS] Failed to generate valid timeline for T* = {t_star}")
             continue
         
-        # Extract the RNG pattern values
-        rng_pattern = next((p for p in patterns if p.name == 'rng'), None)
-        if rng_pattern:
-            # Calculate error for observed years
-            observed_years = [2015, 2020]
-            errors = {}
-            total_error = 0.0
-            simulated_values = {}
+        # --- Modified Error Calculation (Weighted by Variance) --- 
+        total_error = 0.0
+        all_errors = {}
+        simulated_values = {}
+
+        # Iterate through all patterns used in this simulation
+        for p in patterns:
+            pattern_name = p.name
+            simulated_values[pattern_name] = {}
+            all_errors[pattern_name] = {}
             
-            for year in observed_years:
-                if year in rng_pattern.observed:
-                    idx = tl.years.index(year)
-                    simulated_value = tl.data['rng'][idx]
-                    observed_value = rng_pattern.observed[year]
-                    simulated_values[year] = simulated_value
-                    
-                    # Calculate squared error
-                    error = (simulated_value - observed_value) ** 2
-                    errors[year] = error
-                    total_error += error
+            # Check if this pattern has observations
+            if hasattr(p, 'observed') and p.observed:
+                
+                # Calculate variance for weighting, handle edge cases
+                observed_values = list(p.observed.values())
+                weight_factor = 1.0  # Default weight (use raw error if variance is zero or undefined)
+                if len(observed_values) >= 2:
+                    variance = np.var(observed_values)
+                    # Use variance as weight factor only if it's significantly non-zero
+                    if variance > 1e-9: 
+                        weight_factor = variance
+                
+                # Iterate through observed years for this pattern
+                for year, observed_value in p.observed.items():
+                    # Check if the year exists in the generated timeline
+                    if year in tl.years:
+                        idx = tl.years.index(year)
+                        # Check if the pattern exists in the timeline data
+                        if pattern_name in tl.data:
+                            simulated_value = tl.data[pattern_name][idx]
+                            simulated_values[pattern_name][year] = simulated_value
+                            
+                            # Calculate WEIGHTED squared error for this data point
+                            error_sq = (simulated_value - observed_value) ** 2
+                            weighted_error = error_sq / weight_factor # Divide by variance (or 1.0)
+                            all_errors[pattern_name][year] = weighted_error # Store weighted error
+                            total_error += weighted_error # Add weighted error to total
+                        else:
+                            print(f"[CONS] Warning: Pattern '{pattern_name}' not found in timeline data for T*={t_star}.")
+                    # else: # Optionally handle cases where observed year isn't in timeline range
+                        # print(f"[CONS] Warning: Observed year {year} for pattern '{pattern_name}' not in timeline range for T*={t_star}.")
             
-            # Calculate weight based on error (higher error = lower weight)
-            log_weight = -alpha * total_error
-            weight = math.exp(log_weight)
+        # --- End Modified Error Calculation ---
             
-            # Store results
-            results[t_star] = {
-                'errors': errors,
-                'total_error': total_error,
-                'log_weight': log_weight,
-                'weight': weight,
-                'simulated_values': simulated_values
-            }
+        # Calculate weight based on the comprehensive total error
+        log_weight = -alpha * total_error
+        weight = math.exp(log_weight)
+        
+        # Store results (errors dict now contains weighted errors)
+        results[t_star] = {
+            'errors': all_errors, 
+            'total_error': total_error, # This is the sum of weighted errors
+            'log_weight': log_weight,
+            'weight': weight,
+            'simulated_values': simulated_values
+        }
     
     # Normalize weights to get probabilities
     if results:

@@ -44,7 +44,7 @@ from patterns.enhanced_rng import EnhancedRngPattern, GCP_SIGNIFICANCE_MILESTONE
 from patterns.uap_yearly import UapYearlyPattern
 
 # Output directory
-OUTPUT_DIR = PROJECT_ROOT / "singularity_window_analyzer" / "output"
+OUTPUT_DIR = PROJECT_ROOT / "output" / "singularity_analysis"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -1419,7 +1419,7 @@ def generate_report(output_paths, gcp_scores, cumulative_deviation_values,
 
 def main():
     parser = argparse.ArgumentParser(description='Analyze singularity window and generate report')
-    parser.add_argument('--output_dir', type=str, default=str(OUTPUT_DIR),
+    parser.add_argument('--output_dir', type=str, default='output',
                         help='Directory to save output files')
     parser.add_argument('--t_star', type=int, default=None,
                         help='Optimized t* value (singularity window year). If not provided, it will be calculated.')
@@ -1431,13 +1431,6 @@ def main():
                         help='Confidence level for t* confidence interval (0-1)')
     
     args = parser.parse_args()
-    
-    # Ensure output directory is in singularity_window_analyzer/output
-    if not args.output_dir.startswith(str(PROJECT_ROOT / "singularity_window_analyzer")):
-        # Create a timestamped directory in the standard location
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        args.output_dir = str(OUTPUT_DIR / f"run_{timestamp}")
-        print(f"Output directory set to: {args.output_dir}")
     
     # Run analysis and generate report
     analyze_and_generate_report(args)
