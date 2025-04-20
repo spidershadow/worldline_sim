@@ -1,4 +1,8 @@
-
+# Output directories
+singularity_window_analyzer/output/
+**/singularity_window_analyzer/output/
+output/
+**/output/
 
 # Generated files
 *.html
@@ -7,6 +11,20 @@
 *.log
 *.pdf
 *.mp4
+
+# Archives and compressed files
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Backup files
+*.bak
+*.bak[0-9]
+*.bak[0-9][0-9]
+*~
+.#*
+\#*\#
 
 # Python cache files
 __pycache__/
