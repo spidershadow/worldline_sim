@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "output/**",
+      "src": "output/singularity_window_report.html",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
-      "dest": "/output/$1"
+      "src": "/",
+      "dest": "/output/singularity_window_report.html"
     }
   ]
 } 
