@@ -12,7 +12,7 @@
       "dest": "/output/singularity_window_report.html"
     },
     {
-      "src": "/(.*\\.png)",
+      "src": "/([^/]+\\.png)",
       "dest": "/output/$1"
     }
   ]
