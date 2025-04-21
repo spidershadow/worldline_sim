@@ -1,8 +1,6 @@
 # Output directories
 singularity_window_analyzer/output/
 **/singularity_window_analyzer/output/
-output/
-**/output/
 
 # Generated files
 *.html
@@ -11,6 +9,15 @@ output/
 *.log
 *.pdf
 *.mp4
+
+# But track these specific files
+!output/singularity_window_report.html
+!output/gcp_retrocausal_scores.png
+!output/gcp_cumulative_deviation.png
+!output/uap_sightings_trend.png
+!output/uap_deviation_profile.png
+!output/joint_pattern_correlation.png
+!output/joint_time_series.png
 
 # Archives and compressed files
 *.tar.gz
