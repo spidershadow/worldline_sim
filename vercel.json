@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "output/singularity_window_report.html",
+      "src": "output/**/*.{html,png}",
       "use": "@vercel/static"
     }
   ],
@@ -10,6 +10,10 @@
     {
       "src": "/",
       "dest": "/output/singularity_window_report.html"
+    },
+    {
+      "src": "/(.*\\.png)",
+      "dest": "/output/$1"
     }
   ]
 } 
